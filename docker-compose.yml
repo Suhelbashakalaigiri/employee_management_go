@@ -1,0 +1,72 @@
+services:
+
+  mysql:
+    image: mysql:8.0
+    container_name: employee-mysql
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+
+    ports:
+      - "3306:3306"
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+
+  migration:
+    image: migrate/migrate:v4.19.0
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+    volumes:
+      - ./migrations:/migrations
+
+    command:
+      - "-path=/migrations"
+      - "-database=mysql://${DB_USER}:${DB_PASSWORD}@tcp(mysql:3306)/${DB_NAME}?charset=utf8mb4&parseTime=true"
+      - "up"
+
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: employee-management-app-go
+
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+
+    environment:
+      APP_PORT: 8080
+      APP_ENV: docker
+
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+
+      DB_MAX_OPEN_CONNS: 25
+      DB_MAX_IDLE_CONNS: 10
+      DB_CONN_MAX_LIFETIME_MINUTES: 5
+      DB_CONN_MAX_IDLE_TIME_MINUTES: 5
+
+    ports:
+      - "8081:8080"
+
+
+volumes:
+  mysql_data:
