@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: employee-management-go
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: employee-management-go
+
+  template:
+    metadata:
+      labels:
+        app: employee-management-go
+
+    spec:
+      containers:
+        - name: employee-management-go
+
+          image: suhelbasha7324/employee-management-go:1.0
+
+          ports:
+            - containerPort: 8080
+
+          env:
+            - name: APP_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-management-config
+                  key: APP_PORT
+
+            - name: DB_HOST
+              value: employee-management-mysql
+
+            - name: DB_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-management-config
+                  key: DB_PORT
+
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-management-config
+                  key: DB_NAME
+
+            - name: DB_USER
+              value: root
+
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: root-password
+
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

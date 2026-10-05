@@ -1,0 +1,50 @@
+apiVersion: batch/v1
+kind: Job
+
+metadata:
+  name: employee-management-migration
+
+spec:
+  backoffLimit: 3
+
+  template:
+    metadata:
+      labels:
+        app: employee-management-migration
+
+    spec:
+      restartPolicy: OnFailure
+
+      containers:
+        - name: migration
+          image: migrate/migrate:v4.19.0
+
+          command:
+            - migrate
+
+          args:
+            - "-path=/migrations"
+            - "-database=mysql://root:$(DB_PASSWORD)@tcp(employee-management-mysql:3306)/$(DB_NAME)?charset=utf8mb4&parseTime=true"
+            - "up"
+
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: root-password
+
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: employee-management-config
+                  key: DB_NAME
+
+          volumeMounts:
+            - name: migrations
+              mountPath: /migrations
+
+      volumes:
+        - name: migrations
+          configMap:
+            name: employee-management-migrations
