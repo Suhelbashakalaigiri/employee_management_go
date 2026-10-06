@@ -7,6 +7,10 @@ bin/
 *.dylib
 server
 
+# Kubernetes secrets
+k8s/secret.yaml
+k8s/eks/secret.yaml
+
 # Architecture / OS specific builds
 /dist/
 
