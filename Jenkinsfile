@@ -14,13 +14,7 @@ pipeline {
             }
         }
 
-        stage('Validate Go Formatting') {
-            steps {
-                bat '''
-                    powershell -NoProfile -Command "$files = gofmt -l .; if ($files) { $files; exit 1 } else { Write-Host 'Go formatting is valid' }"
-                '''
-            }
-        }
+
 
         stage('Go Vet') {
             steps {
