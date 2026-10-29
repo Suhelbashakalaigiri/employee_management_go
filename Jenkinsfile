@@ -14,8 +14,6 @@ pipeline {
             }
         }
 
-
-
         stage('Go Vet') {
             steps {
                 bat 'go vet ./...'
@@ -36,10 +34,10 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                 bat 'docker build -t suhelbasha7324/employee-management-go:latest .'
+                bat 'docker build -t suhelbasha7324/employee-management-go:latest .'
             }
         }
-        
+
         stage('Docker Push') {
             steps {
                 withCredentials([
@@ -51,7 +49,7 @@ pipeline {
                 ]) {
                     bat '''
                         @echo off
-                        echo %DOCKER_TOKEN% | docker login -u %DOCKER_USER% --password-stdin
+                        powershell -NoProfile -Command "$env:DOCKER_TOKEN | docker login -u $env:DOCKER_USER --password-stdin"
                         if errorlevel 1 exit /b 1
 
                         docker push suhelbasha7324/employee-management-go:latest
@@ -62,15 +60,19 @@ pipeline {
                 }
             }
         }
-
     }
 
     post {
         success {
-            echo 'CI validation completed successfully.'
+            echo 'CI pipeline completed successfully.'
         }
+
         failure {
-            echo 'CI failed. Check the stage logs for details.'
+            echo 'CI pipeline failed. Check the failed stage in Console Output.'
+        }
+
+        always {
+            echo 'CI pipeline execution finished.'
         }
     }
 }
