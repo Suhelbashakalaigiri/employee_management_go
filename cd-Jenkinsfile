@@ -1,0 +1,140 @@
+
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 15, unit: 'MINUTES')
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Deploy to Minikube') {
+            steps {
+                withCredentials([
+                    file(
+                        credentialsId: 'minikube-kubeconfig',
+                        variable: 'KUBECONFIG'
+                    )
+                ]) {
+                    bat '''
+                        @echo off
+
+                        echo ======================================
+                        echo CONNECTING TO MINIKUBE
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" config current-context
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" get nodes
+                        if errorlevel 1 exit /b 1
+
+
+                        echo ======================================
+                        echo APPLYING CONFIGURATION
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/configmap.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/mysql-pvc.yaml
+                        if errorlevel 1 exit /b 1
+
+
+                        echo ======================================
+                        echo DEPLOYING MYSQL
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/mysql-service.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/mysql-deployment.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" rollout status deployment/employee-management-mysql --timeout=180s
+                        if errorlevel 1 exit /b 1
+
+
+                        echo ======================================
+                        echo RUNNING DATABASE MIGRATIONS
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/migration-configmap.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" delete job employee-management-migration --ignore-not-found=true
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/migration.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" wait --for=condition=complete job/employee-management-migration --timeout=180s
+
+                        if errorlevel 1 goto migration_failed
+
+
+                        echo ======================================
+                        echo DEPLOYING GO APPLICATION
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/go-app-deployment.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" apply -f k8s/go-app-service.yaml
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" rollout status deployment/employee-management-go --timeout=180s
+                        if errorlevel 1 exit /b 1
+
+
+                        echo ======================================
+                        echo DEPLOYMENT VERIFICATION
+                        echo ======================================
+
+                        kubectl --kubeconfig="%KUBECONFIG%" get pods
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" get services
+                        if errorlevel 1 exit /b 1
+
+                        kubectl --kubeconfig="%KUBECONFIG%" get endpoints employee-management-go
+                        if errorlevel 1 exit /b 1
+
+                        echo ======================================
+                        echo CD PIPELINE COMPLETED SUCCESSFULLY
+                        echo ======================================
+
+                        exit /b 0
+
+                        :migration_failed
+                        echo DATABASE MIGRATION FAILED
+                        kubectl --kubeconfig="%KUBECONFIG%" logs job/employee-management-migration
+                        exit /b 1
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CD pipeline completed successfully. Application deployed to Minikube.'
+        }
+
+        failure {
+            echo 'CD pipeline failed. Check the failed command in Console Output.'
+        }
+
+        always {
+            echo 'CD pipeline execution finished.'
+        }
+    }
+}
